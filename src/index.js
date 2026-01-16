@@ -2,28 +2,14 @@
 
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 const { BCApiClient } = require('./bc-client.js');
 const { MockBCClient } = require('./mock-data.js');
-const { tools, resources } = require('./tools.js');
 
 require('dotenv').config();
 
 // Check for demo mode
 const isDemoMode = process.env.BC_DEMO_MODE === 'true' || !process.env.BC_TENANT_ID;
-
-// Create MCP Server
-const server = new Server(
-  { 
-    name: 'ciellos-bc-mcp-server', 
-    version: '1.0.0' 
-  },
-  { 
-    capabilities: { 
-      tools: {}, 
-      resources: {} 
-    } 
-  }
-);
 
 // Initialize BC API Client (real or mock)
 const bcClient = isDemoMode 
@@ -36,80 +22,72 @@ const bcClient = isDemoMode
       company: process.env.BC_COMPANY || 'CRONUS USA, Inc.'
     });
 
-// Register Tools List Handler
-server.setRequestHandler('tools/list', async () => ({
-  tools: tools
-}));
+// Define tools
+const tools = [
+  {
+    name: 'bc_query',
+    description: 'Query Business Central entities (customers, vendors, items, sales orders, etc.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        entity: { type: 'string', description: 'BC entity (customers, vendors, items, salesOrders, purchaseOrders)' },
+        filter: { type: 'string', description: 'OData filter expression' },
+        top: { type: 'number', description: 'Max records to return' }
+      },
+      required: ['entity']
+    }
+  },
+  {
+    name: 'bc_create_record',
+    description: 'Create a new record in Business Central',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        entity: { type: 'string', description: 'BC entity type' },
+        data: { type: 'object', description: 'Record data' }
+      },
+      required: ['entity', 'data']
+    }
+  },
+  {
+    name: 'bc_list_companies',
+    description: 'List all companies in Business Central',
+    inputSchema: { type: 'object', properties: {} }
+  }
+];
 
-// Register Tools Call Handler
-server.setRequestHandler('tools/call', async (request) => {
+// Create MCP Server
+const server = new Server(
+  { name: 'ciellos-bc-mcp-server', version: '1.0.0' },
+  { capabilities: { tools: {} } }
+);
+
+// Handle tools/list
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+
+// Handle tools/call
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-
+  
   try {
     switch (name) {
       case 'bc_query':
-        const queryResult = await bcClient.query(args.entity, args.filter, args.select, args.top);
-        return { content: [{ type: 'text', text: JSON.stringify(queryResult, null, 2) }] };
-
-      case 'bc_get_record':
-        const record = await bcClient.getById(args.entity, args.id);
-        return { content: [{ type: 'text', text: JSON.stringify(record, null, 2) }] };
-
+        const result = await bcClient.query(args.entity, args.filter, null, args.top || 100);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      
       case 'bc_create_record':
         const created = await bcClient.create(args.entity, args.data);
         return { content: [{ type: 'text', text: JSON.stringify(created, null, 2) }] };
-
-      case 'bc_update_record':
-        const updated = await bcClient.update(args.entity, args.id, args.data);
-        return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }] };
-
-      case 'bc_delete_record':
-        await bcClient.delete(args.entity, args.id);
-        return { content: [{ type: 'text', text: `Record ${args.id} deleted successfully` }] };
-
+      
       case 'bc_list_companies':
         const companies = await bcClient.listCompanies();
         return { content: [{ type: 'text', text: JSON.stringify(companies, null, 2) }] };
-
-      case 'bc_get_metadata':
-        const metadata = await bcClient.getMetadata(args.entity);
-        return { content: [{ type: 'text', text: JSON.stringify(metadata, null, 2) }] };
-
+      
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
-    return { 
-      content: [{ type: 'text', text: `Error: ${error.message}` }], 
-      isError: true 
-    };
-  }
-});
-
-// Register Resources List Handler
-server.setRequestHandler('resources/list', async () => ({
-  resources: resources
-}));
-
-// Register Resources Read Handler
-server.setRequestHandler('resources/read', async (request) => {
-  const { uri } = request.params;
-  
-  try {
-    if (uri.startsWith('bc://entities')) {
-      const entities = await bcClient.listEntities();
-      return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(entities, null, 2) }] };
-    }
-    
-    if (uri.startsWith('bc://schema/')) {
-      const entity = uri.replace('bc://schema/', '');
-      const schema = await bcClient.getMetadata(entity);
-      return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(schema, null, 2) }] };
-    }
-
-    throw new Error(`Unknown resource: ${uri}`);
-  } catch (error) {
-    throw new Error(`Failed to read resource: ${error.message}`);
+    return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
   }
 });
 
@@ -117,11 +95,11 @@ server.setRequestHandler('resources/read', async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  const mode = isDemoMode ? '(DEMO MODE - mock data)' : '(Live BC connection)';
-  console.error(`Ciellos BC MCP Server running on stdio ${mode}`);
+  const mode = isDemoMode ? '(DEMO MODE)' : '(Live BC)';
+  console.error(`Ciellos BC MCP Server running ${mode}`);
 }
 
 main().catch((error) => {
-  console.error('Failed to start server:', error);
+  console.error('Failed to start:', error);
   process.exit(1);
 });
