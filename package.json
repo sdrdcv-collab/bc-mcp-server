@@ -1,0 +1,46 @@
+{
+  "name": "@ciellos/bc-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server for Microsoft Dynamics 365 Business Central - Enables AI agents to interact with BC modules (Finance, Sales, Purchasing)",
+  "main": "src/index.js",
+  "bin": {
+    "bc-mcp-server": "./src/index.js"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ciellos-dev/bc-mcp-server.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "business-central",
+    "dynamics-365",
+    "erp",
+    "ai",
+    "copilot",
+    "windsurf",
+    "ciellos"
+  ],
+  "author": "Ciellos",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ciellos-dev/bc-mcp-server/issues"
+  },
+  "homepage": "https://github.com/ciellos-dev/bc-mcp-server#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
