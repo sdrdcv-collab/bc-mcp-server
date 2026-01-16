@@ -3,9 +3,13 @@
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { BCApiClient } = require('./bc-client.js');
+const { MockBCClient } = require('./mock-data.js');
 const { tools, resources } = require('./tools.js');
 
 require('dotenv').config();
+
+// Check for demo mode
+const isDemoMode = process.env.BC_DEMO_MODE === 'true' || !process.env.BC_TENANT_ID;
 
 // Create MCP Server
 const server = new Server(
@@ -21,14 +25,16 @@ const server = new Server(
   }
 );
 
-// Initialize BC API Client
-const bcClient = new BCApiClient({
-  tenantId: process.env.BC_TENANT_ID,
-  clientId: process.env.BC_CLIENT_ID,
-  clientSecret: process.env.BC_CLIENT_SECRET,
-  environment: process.env.BC_ENVIRONMENT || 'Production',
-  company: process.env.BC_COMPANY || 'CRONUS USA, Inc.'
-});
+// Initialize BC API Client (real or mock)
+const bcClient = isDemoMode 
+  ? new MockBCClient()
+  : new BCApiClient({
+      tenantId: process.env.BC_TENANT_ID,
+      clientId: process.env.BC_CLIENT_ID,
+      clientSecret: process.env.BC_CLIENT_SECRET,
+      environment: process.env.BC_ENVIRONMENT || 'Production',
+      company: process.env.BC_COMPANY || 'CRONUS USA, Inc.'
+    });
 
 // Register Tools List Handler
 server.setRequestHandler('tools/list', async () => ({
@@ -111,7 +117,8 @@ server.setRequestHandler('resources/read', async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Ciellos BC MCP Server running on stdio');
+  const mode = isDemoMode ? '(DEMO MODE - mock data)' : '(Live BC connection)';
+  console.error(`Ciellos BC MCP Server running on stdio ${mode}`);
 }
 
 main().catch((error) => {
