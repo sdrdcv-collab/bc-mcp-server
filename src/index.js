@@ -6,11 +6,13 @@ const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontext
 const { BCApiClient } = require('./bc-client.js');
 const { MockBCClient } = require('./mock-data.js');
 const { ATDDValidator, ATDD_RULES } = require('./atdd-validator.js');
+const { ATDDTestGenerator } = require('./atdd-generator.js');
 
 require('dotenv').config();
 
-// Initialize ATDD Validator
+// Initialize ATDD Validator and Generator
 const atddValidator = new ATDDValidator();
+const atddGenerator = new ATDDTestGenerator();
 
 // Check for demo mode
 const isDemoMode = process.env.BC_DEMO_MODE === 'true' || !process.env.BC_TENANT_ID;
@@ -107,6 +109,31 @@ const tools = [
     name: 'atdd_get_rules',
     description: 'Get all ATDD Ciellos validation rules with descriptions and examples',
     inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'atdd_create_unit_tests',
+    description: 'Generate AL test codeunit from a test plan markdown following Ciellos ATDD guidelines. Returns complete AL code.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        testPlan: { type: 'string', description: 'Test plan content in markdown format with Gherkin scenarios' },
+        codeunitId: { type: 'number', description: 'Codeunit ID (default: 50100)' },
+        codeunitName: { type: 'string', description: 'Codeunit name (auto-generated if not provided)' },
+        libraryCodeunit: { type: 'string', description: 'Library codeunit name to use (default: LibraryApprovedSupplier182FDW)' }
+      },
+      required: ['testPlan']
+    }
+  },
+  {
+    name: 'atdd_parse_test_plan',
+    description: 'Parse a test plan markdown and extract scenarios without generating code. Useful for reviewing structure.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        testPlan: { type: 'string', description: 'Test plan content in markdown format' }
+      },
+      required: ['testPlan']
+    }
   }
 ];
 
@@ -157,6 +184,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       case 'atdd_get_rules':
         return { content: [{ type: 'text', text: JSON.stringify(ATDD_RULES, null, 2) }] };
+      
+      case 'atdd_create_unit_tests':
+        const parsedPlan = atddGenerator.parseTestPlan(args.testPlan);
+        const generatedCode = atddGenerator.generateTestCodeunit(parsedPlan, {
+          codeunitId: args.codeunitId,
+          codeunitName: args.codeunitName,
+          libraryCodeunit: args.libraryCodeunit
+        });
+        const appliedRules = atddGenerator.getAppliedRules();
+        return { 
+          content: [{ 
+            type: 'text', 
+            text: JSON.stringify({
+              code: generatedCode,
+              scenarioCount: parsedPlan.scenarios.length,
+              metadata: parsedPlan.metadata,
+              appliedRules: appliedRules
+            }, null, 2) 
+          }] 
+        };
+      
+      case 'atdd_parse_test_plan':
+        const parsed = atddGenerator.parseTestPlan(args.testPlan);
+        return { content: [{ type: 'text', text: JSON.stringify(parsed, null, 2) }] };
       
       default:
         throw new Error(`Unknown tool: ${name}`);
