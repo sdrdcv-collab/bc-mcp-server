@@ -5,8 +5,12 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 const { BCApiClient } = require('./bc-client.js');
 const { MockBCClient } = require('./mock-data.js');
+const { ATDDValidator, ATDD_RULES } = require('./atdd-validator.js');
 
 require('dotenv').config();
+
+// Initialize ATDD Validator
+const atddValidator = new ATDDValidator();
 
 // Check for demo mode
 const isDemoMode = process.env.BC_DEMO_MODE === 'true' || !process.env.BC_TENANT_ID;
@@ -53,6 +57,56 @@ const tools = [
     name: 'bc_list_companies',
     description: 'List all companies in Business Central',
     inputSchema: { type: 'object', properties: {} }
+  },
+  // ATDD Validation Tools
+  {
+    name: 'atdd_validate_test',
+    description: 'Validate AL test code against Ciellos ATDD guidelines. Returns all rule violations.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'AL test code to validate' }
+      },
+      required: ['code']
+    }
+  },
+  {
+    name: 'atdd_validate_naming',
+    description: 'Validate test procedure naming conventions (T####_ prefix, PascalCase, no quotes)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'AL test code to validate' }
+      },
+      required: ['code']
+    }
+  },
+  {
+    name: 'atdd_validate_comments',
+    description: 'Validate GIVEN-WHEN-THEN comment structure (no extra comments allowed)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'AL test code to validate' }
+      },
+      required: ['code']
+    }
+  },
+  {
+    name: 'atdd_validate_scenarios',
+    description: 'Validate scenario count matches test procedure count',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'AL test code to validate' }
+      },
+      required: ['code']
+    }
+  },
+  {
+    name: 'atdd_get_rules',
+    description: 'Get all ATDD Ciellos validation rules with descriptions and examples',
+    inputSchema: { type: 'object', properties: {} }
   }
 ];
 
@@ -82,6 +136,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'bc_list_companies':
         const companies = await bcClient.listCompanies();
         return { content: [{ type: 'text', text: JSON.stringify(companies, null, 2) }] };
+      
+      // ATDD Validation Tools
+      case 'atdd_validate_test':
+        const fullValidation = atddValidator.validateAll(args.code);
+        const summary = atddValidator.getSummary(fullValidation);
+        return { content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }] };
+      
+      case 'atdd_validate_naming':
+        const namingIssues = atddValidator.validateTestNaming(args.code);
+        return { content: [{ type: 'text', text: JSON.stringify({ issues: namingIssues, count: namingIssues.length }, null, 2) }] };
+      
+      case 'atdd_validate_comments':
+        const commentIssues = atddValidator.validateCommentStructure(args.code);
+        return { content: [{ type: 'text', text: JSON.stringify({ issues: commentIssues, count: commentIssues.length }, null, 2) }] };
+      
+      case 'atdd_validate_scenarios':
+        const scenarioIssues = atddValidator.validateScenarioCount(args.code);
+        return { content: [{ type: 'text', text: JSON.stringify({ issues: scenarioIssues, count: scenarioIssues.length }, null, 2) }] };
+      
+      case 'atdd_get_rules':
+        return { content: [{ type: 'text', text: JSON.stringify(ATDD_RULES, null, 2) }] };
       
       default:
         throw new Error(`Unknown tool: ${name}`);
